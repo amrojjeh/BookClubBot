@@ -222,16 +222,11 @@ description = """A bot that handles regular book club needs, primarily nominatin
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="b!", description=description, intents=intents)
+bot.remove_command("help")
 
 class Emojis:
 	check_mark = "✅"
 	cross = "❌"
-
-# Example:
-help = f"""Nominate books with `{bot.command_prefix}nom [BOOK_NAME]` or vote with `{bot.command_prefix}vote [FIRST PLACE ID] [SECOND PLACE ID] [THIRD PLACE ID]`.
-List books with `{bot.command_prefix}list`. Remove a book you nominated with `{bot.command_prefix}remove [ID]`.
-Finish the voting stage with `{bot.command_prefix}end`
-Note: Using any of these commands requires the "trusted" role"""
 
 def voting_started():
 	async def predicate(ctx):
@@ -250,7 +245,7 @@ def is_trusted():
 	async def predicate(ctx):
 		if "trusted" in [r.name.lower() for r in ctx.author.roles]:
 			return True
-		await ctx.send("You must be trusted in order to ues the command")
+		await ctx.send("You must be trusted in order to use the command")
 		await ctx.message.add_reaction(Emojis.cross)
 		return False
 	return commands.check(predicate)
@@ -265,16 +260,21 @@ async def on_ready():
 @bot.command()
 @is_trusted()
 async def start(ctx):
+	help_msg = f"""Nominate books with `{bot.command_prefix}nom [BOOK_NAME]` or vote with `{bot.command_prefix}vote [FIRST PLACE ID] [SECOND PLACE ID]...`.
+List books with `{bot.command_prefix}list`. Remove a book you nominated with `{bot.command_prefix}rem`.
+Finish the voting stage with `{bot.command_prefix}end` to delcare the winner
+Note: Using any of these commands requires the "trusted" role"""
+
 	if ctx.guild.id in guilds:
 		guild_data = guilds[ctx.guild.id]
 		if guild_data.voting:
 			await ctx.send("A voting session is already going. End with `b!end`")
 		else:
 			guild_data.voting = True
-			await ctx.send(help)
+			await ctx.send(help_msg)
 	else:
 		guilds[ctx.guild.id] = GuildData()
-		await ctx.send(help)
+		await ctx.send(help_msg)
 
 @bot.command(aliases=["nom"])
 @voting_started()
@@ -351,6 +351,19 @@ async def search(ctx, *, book_name):
 		await ctx.send("Book not found")
 	else:
 		await ctx.send(embed=book.embed())
+
+@bot.command()
+async def help(ctx):
+	embed = discord.Embed()
+	embed.title = "Help"
+	embed.set_author(name="Book Club")
+	embed.color = discord.Color.blue()
+
+	embed.add_field(name="search", value=f"Search a book. `{bot.command_prefix}search mexican gothic", inline=False)
+	embed.add_field(name="start", value=f"Start a voting session. Further help once executed", inline=False)
+	embed.add_field(name="end", value=f"End a voting session. Declares the winner", inline=False)
+
+	await ctx.send(embed=embed)
 
 token = ""
 with open("token.txt", "r") as f:
