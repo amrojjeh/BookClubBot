@@ -258,6 +258,7 @@ async def on_ready():
 	print("--------------")
 
 @bot.command()
+@commands.guild_only()
 @is_trusted()
 async def start(ctx):
 	help_msg = f"""Nominate books with `{bot.command_prefix}nom [BOOK_NAME]` or vote with `{bot.command_prefix}vote [FIRST PLACE ID] [SECOND PLACE ID]...`.
@@ -277,6 +278,7 @@ Note: Using any of these commands requires the "trusted" role"""
 		await ctx.send(help_msg)
 
 @bot.command(aliases=["nom"])
+@commands.guild_only()
 @voting_started()
 @is_trusted()
 async def nominate(ctx, *, book_name):
@@ -295,6 +297,7 @@ async def nominate(ctx, *, book_name):
 		await ctx.send(f"Book already nominated by {nomination.nominator.name}")
 
 @bot.command(aliases=["clear","rem"])
+@commands.guild_only()
 @voting_started()
 @is_trusted()
 async def remove(ctx):
@@ -303,6 +306,7 @@ async def remove(ctx):
 	await ctx.message.add_reaction(Emojis.check_mark)
 
 @bot.command(aliases=["v"])
+@commands.guild_only()
 @voting_started()
 @is_trusted()
 async def vote(ctx, *ids):
@@ -326,6 +330,7 @@ You can also pick second and third place by executing `{bot.command_prefix}vote 
 
 
 @bot.command()
+@commands.guild_only()
 @voting_started()
 @is_trusted()
 async def end(ctx):
@@ -339,6 +344,7 @@ async def end(ctx):
 		await ctx.send("Voting session ended without declaring winner")
 
 @bot.command()
+@commands.guild_only()
 @voting_started()
 async def list(ctx):
 	guild_data = guilds[ctx.guild.id]
