@@ -48,6 +48,68 @@ class Book:
 		return embed
 
 class Nominations:
+	class Rankings:
+		def __init__(self, parent, ranks):
+			"""parent: Nominations
+			ranks: [(rank: int, nomination: Nominations.Nomination)]
+			"""
+			ranks.sort(key=lambda x: x[0])
+			self.ranks = ranks
+			self.parent = parent
+
+		def tied(self):
+			"""Get highest tied results. Tie breaker is not applied here.
+
+			Results
+			--------
+			[Nominations.Nomination]
+				List of tied nominations
+			"""
+			if len(self.ranks) == 0:
+				return []
+			tied = []
+			common_rank = self.ranks[0][0]
+			for rank, n in self.ranks:
+				if rank == common_rank:
+					tied.append(n)
+				else:
+					break
+			return tied
+
+		def winners_after_tiebreaker(self):
+			if len(self.ranks) == 0:
+				return []
+			tied_winners = self.tied()
+			if len(tied_winners) == 1:
+				return tied_winners
+
+			for place in range(1, self.parent.size() + 1):
+				max_count = 0
+				for n in tied_winners:
+					count = len(n.get_votes()[place])
+					max_count = count if count > max_count else max_count
+				result = []
+				for n in tied_winners:
+					if len(n.get_votes()[place]) == max_count:
+						result.append(n)
+				tied_winners = result
+				if len(tied_winners) == 1:
+					return tied_winners
+			return tied_winners
+
+		def embed(self):
+			embed = discord.Embed()
+			embed.color = discord.Color.blue()
+			embed.title = "Rankings"
+			embed.set_author(name="Book Club")
+			tied_winners = self.winners_after_tiebreaker()
+			for i in tied_winners:
+				embed.add_field(name=f":crown:{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank()}", inline=False)
+			for i in range(len(tied_winners), len(self.ranks)):
+				i = self.ranks[i][1]
+				embed.add_field(name=f"{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank()}", inline=False)
+			return embed
+
 	class Voting:
 		def __init__(self, parent):
 			self.parent = parent
@@ -89,8 +151,20 @@ class Nominations:
 			for place, voters in self.get_votes().items():
 				rank += len(voters) * place
 				total_voters += len(voters)
-			rank /= total_voters
+			rank = (rank / total_voters) if total_voters != 0 else 0
 			return rank
+
+		def scores_str(self):
+			rankings = self.get_votes()
+			vote_count = defaultdict(lambda: 0)
+			for i in range(1, self.parent.size() + 1):
+				vote_count[i] = len(rankings[i])
+			value = f":first_place:{vote_count[1]} :second_place:{vote_count[2]} :third_place:{vote_count[3]}"
+
+			for i in range(4, self.parent.size() + 1):
+				if vote_count[i] > 0:
+					value += f" ({i}th) {vote_count[i]}"
+			return value
 
 	def __init__(self):
 		self.nominations = []
@@ -130,17 +204,7 @@ class Nominations:
 		embed.set_author(name="Book Club")
 		embed.color = discord.Color.blue()
 		for identifier, n in enumerate(self.nominations, start=1):
-			rankings = n.get_votes()
-			vote_count = {1: 0, 2: 0, 3: 0}
-			for i in range(1, self.size() + 1):
-				vote_count[i] = len(rankings[i])
-			value = f":first_place:{vote_count[1]} :second_place:{vote_count[2]} :third_place:{vote_count[3]}"
-
-			for i in range(4, self.size() + 1):
-				if vote_count[i] > 0:
-					value += f" ({i}th) {vote_count[i]}"
-
-			embed.add_field(name=f"{identifier}: {n.book.title} - {n.nominator.name}", value=value, inline=False)
+			embed.add_field(name=f"{identifier}: {n.book.title} - {n.nominator.name}", value=n.scores_str(), inline=False)
 		return embed
 
 	def get_user_nomination(self, user):
@@ -170,44 +234,25 @@ class Nominations:
 	def size(self):
 		return len(self.nominations)
 
-	def winner(self):
+	def ranks(self):
+		"""Returns all the ranks in the form of a list of tuples.
+
+		Return
+		------
+		Nominations.Rankings
+			Represents a sorted list of ranked nominations
+		"""
+		result = []
+		for i in self.nominations:
+			result.append((i.rank(), i))
+		return Nominations.Rankings(self, result)
+
+	def winners(self):
 		"""Get the winner nomination.
 
-		return: Nominations.Nomination"""
-		if self.size() == 0:
-			return None
-		tied = []
-		for n in self.nominations:
-			rank = n.rank()
-			if tied == []:
-					tied = [(rank, n)]
-			else:
-				top_rank = tied[0]
-				if rank < top_rank[0]:
-					tied = [(rank, n)]
-				elif rank == top_rank[0]:
-					tied.append(rank, n)
-
-		def tie_breaker(place=1):
-			highest_count = (-1, None)
-			for _, n in tied:
-				count = len(n.get_votes()[place])
-				if count > highest_count[0]:
-					highest_count = (count, n)
-
-			highest_counters = 0
-			for _, n in tied:
-				count = len(n.get_votes()[place])
-				if highest_count[0] == count:
-					highest_counters += 1
-
-			if highest_counters > 1 and (place + 1) <= self.size():
-				return tie_breaker(tied, place + 1)
-			return highest_count[1]
-
-		if len(tied) > 1:
-			return tie_breaker()
-		return tied[0][1]
+		return: [Nominations.Nomination]"""
+		winners = self.ranks().winners_after_tiebreaker()
+		return winners
 
 
 class GuildData:
@@ -272,6 +317,7 @@ Note: Using any of these commands requires the "trusted" role"""
 			await ctx.send("A voting session is already going. End with `b!end`")
 		else:
 			guild_data.voting = True
+			guild_data.nominations = Nominations()
 			await ctx.send(help_msg)
 	else:
 		guilds[ctx.guild.id] = GuildData()
@@ -328,6 +374,13 @@ You can also pick second and third place by executing `{bot.command_prefix}vote 
 		await ctx.send("Duplicate votes")
 		await ctx.message.add_reaction(Emojis.cross)
 
+@bot.command()
+@commands.guild_only()
+@voting_started()
+async def more(ctx, id: int):
+	guild_data = guilds[ctx.guild.id]
+	book = guild_data.nominations.nominations[id - 1].book
+	await ctx.send(embed=book.embed())
 
 @bot.command()
 @commands.guild_only()
@@ -336,12 +389,19 @@ You can also pick second and third place by executing `{bot.command_prefix}vote 
 async def end(ctx):
 	# TODO: Save previous nominations
 	guild_data = guilds[ctx.guild.id]
-	nomination = guild_data.nominations.winner()
+	nominations = guild_data.nominations.winners()
 	guild_data.voting = False
-	if nomination is not None:
+	if len(nominations) == 1:
+		nomination = nominations[0]
 		await ctx.send(f"The winner is: **{nomination.book.title}**, submitted by {nomination.nominator.mention()}")
-	else:
+	elif len(nominations) == 0:
 		await ctx.send("Voting session ended without declaring winner")
+	else:
+		names = nominations[0].book.title
+		for n in nominations[1:]:
+			names += ", " + n.book.title
+		await ctx.send(f"The winners are: **{names}**")
+	guild_data.nominations = None
 
 @bot.command()
 @commands.guild_only()
@@ -349,6 +409,13 @@ async def end(ctx):
 async def list(ctx):
 	guild_data = guilds[ctx.guild.id]
 	await ctx.send(embed=guild_data.nominations.embed())
+
+@bot.command()
+@commands.guild_only()
+@voting_started()
+async def ranks(ctx):
+	guild_data = guilds[ctx.guild.id]
+	await ctx.send(embed=guild_data.nominations.ranks().embed())
 
 @bot.command()
 async def search(ctx, *, book_name):
