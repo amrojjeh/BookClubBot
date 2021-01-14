@@ -44,7 +44,8 @@ class Book:
 		embed.title = self.title
 		embed.description = self.description
 		embed.set_thumbnail(url=self.thumbnail)\
-		.set_author(name=self.author)
+		.set_author(name=self.author)\
+		.add_field(name="Pages", value=self.pages, inline=True)
 		return embed
 
 class Nominations:
