@@ -4,6 +4,15 @@ import json
 import requests
 from collections import defaultdict
 
+def get_place_str(place: int):
+	if place == 1:
+		return ":first_place:"
+	if place == 2:
+		return ":second_place:"
+	if place == 3:
+		return ":third_place:"
+	return f"({place}th)"
+
 class Person:
 	def __init__(self, user):
 		self.id = user.id
@@ -124,6 +133,17 @@ class Nominations:
 			else:
 				raise Exception("Placements are not unique")
 
+		def get_voter_nominations(self, user):
+			"""Returns all the votes made by the user
+
+			user: Person
+			returns: [Nominations.Nomination]
+			"""
+			for v, noms in self.voters.items():
+				if v == user:
+					return noms
+			return None
+
 	class Nomination:
 		def __init__(self, nominations, nominator, book):
 			self.nominator = nominator
@@ -131,7 +151,7 @@ class Nominations:
 			self.parent = nominations
 
 		def get_votes(self):
-			"""Returns a dictionary with the keys being places and values being list of voters.
+			"""Returns a default dictionary with the keys being places and values being list of voters.
 
 			Example: {1: [Jack, John], 2: [Selina], 3: [], 4: [Berry McDonald]} 
 			return: dict
@@ -157,14 +177,11 @@ class Nominations:
 
 		def scores_str(self):
 			rankings = self.get_votes()
-			vote_count = defaultdict(lambda: 0)
+			value = ""
 			for i in range(1, self.parent.size() + 1):
-				vote_count[i] = len(rankings[i])
-			value = f":first_place:{vote_count[1]} :second_place:{vote_count[2]} :third_place:{vote_count[3]}"
-
-			for i in range(4, self.parent.size() + 1):
-				if vote_count[i] > 0:
-					value += f" ({i}th) {vote_count[i]}"
+				vote_count = len(rankings[i])
+				if i < 4 or vote_count > 0:
+					value += f"{get_place_str(i)} {vote_count} "
 			return value
 
 	def __init__(self):
@@ -374,6 +391,22 @@ You can also pick second and third place by executing `{bot.command_prefix}vote 
 	except Exception:
 		await ctx.send("Duplicate votes")
 		await ctx.message.add_reaction(Emojis.cross)
+
+@bot.command()
+@commands.guild_only()
+@voting_started()
+@is_trusted()
+async def ballot(ctx):
+	person = Person(ctx.author)
+	nominations = guilds[ctx.guild.id].nominations.voting.get_voter_nominations(person)
+	embed = discord.Embed()
+	embed.color = discord.Color.blue()
+	embed.title = "My Ballot"
+	embed.set_author(name="Book Club")
+	if nominations != None:
+		for place, nom in enumerate(nominations):
+			embed.add_field(name=f"{get_place_str(place + 1)} {nom.book.title}", value=f"By {nom.book.author}", inline=False)
+	await ctx.send(embed=embed)	
 
 @bot.command()
 @commands.guild_only()
