@@ -3,6 +3,7 @@ from discord.ext import commands
 import json
 import requests
 from collections import defaultdict
+from itertools import chain
 
 def get_place_str(place: int):
 	if place == 1:
@@ -24,6 +25,12 @@ class Person:
 	def __hash__(self):
 		return self.id
 
+	def __str__(self):
+		return f"{name}"
+
+	def __repr__(self):
+		return f"Person({self.name})"
+
 	def mention(self):
 		return f"<@{self.id}>"
 
@@ -38,6 +45,9 @@ class Book:
 
 	def __eq__(self, other):
 		return self.id == other.id
+
+	def __repr__(self):
+		return f"Book({self.id})"
 
 	def get_book(query):
 		params = {"q": query}
@@ -114,10 +124,10 @@ class Nominations:
 			embed.set_author(name="Book Club")
 			tied_winners = self.winners_after_tiebreaker()
 			for i in tied_winners:
-				embed.add_field(name=f":crown:{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank()}", inline=False)
+				embed.add_field(name=f":crown:{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank():.2f}", inline=False)
 			for i in range(len(tied_winners), len(self.ranks)):
 				i = self.ranks[i][1]
-				embed.add_field(name=f"{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank()}", inline=False)
+				embed.add_field(name=f"{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank():.2f}", inline=False)
 			return embed
 
 	class Voting:
@@ -150,13 +160,18 @@ class Nominations:
 			self.book = book
 			self.parent = nominations
 
+		def __repr__(self):
+			return f"Nominations.Nomination({self.book})"
+
 		def get_votes(self):
 			"""Returns a default dictionary with the keys being places and values being list of voters.
-
-			Example: {1: [Jack, John], 2: [Selina], 3: [], 4: [Berry McDonald]} 
-			return: dict
+			Return
+			-------
+			defaultdict
+				Example: {1: [Jack, John], 2: [Selina], 3: [], 4: [Berry McDonald]} 
 			"""
 			votes = defaultdict(lambda: [])
+			print(self.parent.voting.voters)
 
 			for voter, nominations in self.parent.voting.voters.items():
 				for place, n in enumerate(nominations, start=1):
@@ -166,12 +181,31 @@ class Nominations:
 
 			return votes
 
+		def get_non_voters(self):
+			"""Returns a list of people who did not vote
+
+			return: [Person]
+			"""
+			all_voters = self.parent.voting.voters.keys()
+			nominee_voters = chain.from_iterable(self.get_votes().values())
+			non_voters = []
+
+			# Find voters who didn't vote
+			for v in all_voters:
+				if not (v in nominee_voters):
+					non_voters.append(v)
+			return non_voters
+
 		def rank(self):
 			rank = 0
 			total_voters = 0
+			didnt_vote = []
 			for place, voters in self.get_votes().items():
 				rank += len(voters) * place
 				total_voters += len(voters)
+			non_voters = len(self.get_non_voters())
+			total_voters += non_voters
+			rank += non_voters * self.parent.size()
 			rank = (rank / total_voters) if total_voters != 0 else 0
 			return rank
 
@@ -228,8 +262,14 @@ class Nominations:
 	def get_user_nomination(self, user):
 		"""Returns the nomination associated with the user.
 
+		Parameters
+		-----------
 		user: Person
-		return: Nominations.Nomination
+			The nominator
+		Return
+		-------
+		Nominations.Nomination
+			The nomination nominated by the nominator
 		"""
 		for n in self.nominations:
 			if n.nominator == user:
@@ -253,7 +293,7 @@ class Nominations:
 		return len(self.nominations)
 
 	def ranks(self):
-		"""Returns all the ranks in the form of a list of tuples.
+		"""Returns the current state of the ranks
 
 		Return
 		------
@@ -266,9 +306,12 @@ class Nominations:
 		return Nominations.Rankings(self, result)
 
 	def winners(self):
-		"""Get the winner nomination.
+		"""Returns the nominations with the best rankings
 
-		return: [Nominations.Nomination]"""
+		Return
+		------
+		[Nominations.Nomination]
+			The list of nominations that had the best scores"""
 		winners = self.ranks().winners_after_tiebreaker()
 		return winners
 
