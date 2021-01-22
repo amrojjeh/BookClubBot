@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from bookclub import Nominations, Book, Person
+from bookclub import Nominations, Book, Person, get_place_str
 
 guilds = {}
 
@@ -124,7 +124,11 @@ You can also pick second and third place by executing `{bot.command_prefix}vote 
 @commands.guild_only()
 @voting_started()
 @is_trusted()
-async def ballot(ctx):
+async def ballot(ctx, book_id: int=0):
+	if (book_id > 0):
+		nomination = guilds[ctx.guild.id].nominations.nominations[book_id - 1]
+		await ctx.send(embed=nomination.embed())
+		return
 	person = Person(ctx.author)
 	nominations = guilds[ctx.guild.id].nominations.voting.get_voter_nominations(person)
 	embed = discord.Embed()
@@ -134,7 +138,7 @@ async def ballot(ctx):
 	if nominations != None:
 		for place, nom in enumerate(nominations):
 			embed.add_field(name=f"{get_place_str(place + 1)} {nom.book.title}", value=f"By {nom.book.author}", inline=False)
-	await ctx.send(embed=embed)	
+	await ctx.send(embed=embed)
 
 @bot.command()
 @commands.guild_only()

@@ -39,8 +39,12 @@ class Book:
         self.id = id
         self.author = volume_info["authors"][0] if "authors" in volume_info else "No author"
         self.title = volume_info["title"]
-        self.thumbnail = volume_info["imageLinks"]["thumbnail"] if "imageLinks" in volume_info and "thumbnail" in volume_info["imageLinks"] else "https://raw.githubusercontent.com/amrojjeh/BookClubBot/main/default_cover.jpg"
-        self.description = (volume_info["description"][:230] + ("..." if len(volume_info["description"]) > 230 else "")) if "description" in volume_info else "Description not found."
+        self.thumbnail = volume_info["imageLinks"]["thumbnail"] \
+            if "imageLinks" in volume_info and "thumbnail" in volume_info["imageLinks"] \
+            else "https://raw.githubusercontent.com/amrojjeh/BookClubBot/main/default_cover.jpg"
+        self.description = (volume_info["description"][:230] \
+            + ("..." if len(volume_info["description"]) > 230 else "")) \
+            if "description" in volume_info else "Description not found."
         self.pages = volume_info["pageCount"] if "pageCount" in volume_info else None
 
     def __eq__(self, other):
@@ -124,7 +128,8 @@ class Nominations:
             embed.set_author(name="Book Club")
             tied_winners = self.winners_after_tiebreaker()
             for i in tied_winners:
-                embed.add_field(name=f":crown:{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank():.2f}", inline=False)
+                embed.add_field(\
+                    name=f":crown:{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank():.2f}", inline=False)
             for i in range(len(tied_winners), len(self.ranks)):
                 i = self.ranks[i][1]
                 embed.add_field(name=f"{i.book.title} by {i.book.author}", value=f"{i.scores_str()} - rank {i.rank():.2f}", inline=False)
@@ -172,6 +177,10 @@ class Nominations:
             """
             votes = defaultdict(lambda: [])
 
+            votes[1] = []
+            votes[2] = []
+            votes[3] = []
+
             for voter, nominations in self.parent.voting.voters.items():
                 for place, n in enumerate(nominations, start=1):
                     if self == n:
@@ -211,11 +220,24 @@ class Nominations:
         def scores_str(self):
             rankings = self.get_votes()
             value = ""
-            for i in range(1, self.parent.size() + 1):
-                vote_count = len(rankings[i])
-                if i < 4 or vote_count > 0:
-                    value += f"{get_place_str(i)} {vote_count} "
+            for place, voters in rankings.items():
+                vote_count = len(voters)
+                value += f"{get_place_str(place)} {vote_count} "
             return value
+
+        def embed(self):
+            embed = discord.Embed()
+            embed.title = "Book Ballots"
+            embed.set_author(name="Book Club")
+            embed.color = discord.Color.blue()
+
+            for place, voters in self.get_votes().items():
+                if len(voters) == 0:
+                    embed.add_field(name=f"{get_place_str(place)} None", value="0", inline=False)
+                else:
+                    embed.add_field(name=f"{get_place_str(place)} {', '.join(map(lambda x: x.name, voters))}", value=len(voters), inline=False)
+            return embed
+
 
     def __init__(self):
         self.nominations = []
