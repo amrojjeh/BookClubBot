@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from bookclub import Nominations, Book, Person, get_place_str
 from collections import defaultdict
+import os
 
 guilds = defaultdict(lambda: GuildData())
 
@@ -106,7 +107,7 @@ async def vote(ctx, *ids):
 You can also pick second and third place by executing `{guild_data.prefix}vote 1 2 3`""")
 		return
 	try:
-		nominations = guild_data.nominations.get_nominations(*ids) 
+		nominations = guild_data.nominations.get_nominations(*ids)
 		guild_data.nominations.voting.vote(person, *nominations)
 		await ctx.message.add_reaction(Emojis.check_mark)
 	except IndexError:
@@ -217,4 +218,7 @@ async def help(ctx):
 token = ""
 with open("token.txt", "r") as f:
 	token = f.read()
+if os.getenv("DISCORD_TOKEN") != "":
+        token = os.getenv("DISCORD_TOKEN")
+
 bot.run(token)
