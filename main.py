@@ -188,6 +188,17 @@ async def search(ctx, *, book_name):
 		await ctx.send(embed=book.embed())
 
 @bot.command()
+@commands.is_owner()
+async def trust(ctx, val:bool):
+	guild_data = guilds[ctx.guild.id]
+	guild_data.trust_needed = val
+	await ctx.message.add_reaction(Emojis.check_mark)
+
+@bot.command()
+async def ping(ctx):
+	await ctx.send(f"Pong! Latency: {bot.latency} seconds")
+
+@bot.command()
 async def help(ctx):
 	guild_data = guilds[ctx.guild.id]
 
@@ -202,13 +213,6 @@ async def help(ctx):
 	embed.add_field(name="trust", value=f"`{guild_data.prefix}trust 1` to require a 'trusted' role. `0` to disable.", inline=False)
 
 	await ctx.send(embed=embed)
-
-@bot.command()
-@commands.is_owner()
-async def trust(ctx, val:bool):
-	guild_data = guilds[ctx.guild.id]
-	guild_data.trust_needed = val
-	await ctx.message.add_reaction(Emojis.check_mark)
 
 token = ""
 with open("token.txt", "r") as f:
