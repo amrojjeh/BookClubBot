@@ -1,19 +1,22 @@
 import discord
 from discord.ext import commands
 from bookclub import Nominations, Book, Person, get_place_str
+from collections import defaultdict
 
-guilds = {}
+guilds = defaultdict(lambda: GuildData())
 
 description = """A bot that handles regular book club needs, primarily nominating books. It's designed so that it could be used without admin intervention """
 
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="b!", description=description, intents=intents)
+bot = commands.Bot(command_prefix=commands.when_mentioned_or("b!"), description=description, intents=intents)
 bot.remove_command("help")
 
 class GuildData:
 	def __init__(self):
-		self.nominations = Nominations()
-		self.voting = True
+		self.nominations = None # Nominations()
+		self.voting = False
+		self.trust_needed = False
+		self.prefix = "b!"
 
 class Emojis:
 	check_mark = "✅"
@@ -21,28 +24,26 @@ class Emojis:
 
 def voting_started():
 	async def predicate(ctx):
-		if ctx.guild.id in guilds:
-			guild_data = guilds[ctx.guild.id]
-			if not guild_data.voting:
-				await ctx.send(f"Start a voting session with `{bot.command_prefix}start` before nominating!")
-				return False
-			return True
-		else:
-			await ctx.send(f"Start a voting session with `{bot.command_prefix}start` before nominating!")
+		guild_data = guilds[ctx.guild.id]
+		if not guild_data.voting:
+			await ctx.send(f"Start a voting session with `{guild_data.prefix}start` before nominating!")
 			return False
+		return True
 	return commands.check(predicate)
 
 def is_trusted():
 	async def predicate(ctx):
-		if "trusted" in [r.name.lower() for r in ctx.author.roles]:
+		guild_data = guilds[ctx.guild.id]
+		if not guild_data.trust_needed or "trusted" in [r.name.lower() for r in ctx.author.roles]:
 			return True
-		await ctx.send("You must be trusted in order to use the command")
+		await ctx.send(f"You must be trusted in order to use the command. Owner can disable trusted with `{guild_data.prefix}trust`.")
 		await ctx.message.add_reaction(Emojis.cross)
 		return False
 	return commands.check(predicate)
 
 @bot.event
 async def on_ready():
+	await bot.change_presence(activity=discord.Game("b!help for help"))
 	print("Logged in as:")
 	print(bot.user.name)
 	print(bot.user.id)
@@ -52,21 +53,16 @@ async def on_ready():
 @commands.guild_only()
 @is_trusted()
 async def start(ctx):
-	help_msg = f"""Nominate books with `{bot.command_prefix}nom [BOOK_NAME]` or vote with `{bot.command_prefix}vote [FIRST PLACE ID] [SECOND PLACE ID]...`.
-List books with `{bot.command_prefix}list`. Remove a book you nominated with `{bot.command_prefix}rem`.
-Finish the voting stage with `{bot.command_prefix}end` to delcare the winner
+	guild_data = guilds[ctx.guild.id]
+	help_msg = f"""Nominate books with `{guild_data.prefix}nom [BOOK_NAME]` or vote with `{guild_data.prefix}vote [FIRST PLACE ID] [SECOND PLACE ID]...`.
+List books with `{guild_data.prefix}list`. Remove a book you nominated with `{guild_data.prefix}rem`.
+Finish the voting stage with `{guild_data.prefix}end` to delcare the winner
 Note: Using any of these commands requires the "trusted" role"""
-
-	if ctx.guild.id in guilds:
-		guild_data = guilds[ctx.guild.id]
-		if guild_data.voting:
-			await ctx.send("A voting session is already going. End with `b!end`")
-		else:
-			guild_data.voting = True
-			guild_data.nominations = Nominations()
-			await ctx.send(help_msg)
+	if guild_data.voting:
+		await ctx.send("A voting session is already going. End with `b!end`")
 	else:
-		guilds[ctx.guild.id] = GuildData()
+		guild_data.voting = True
+		guild_data.nominations = Nominations()
 		await ctx.send(help_msg)
 
 @bot.command(aliases=["nom"])
@@ -84,7 +80,7 @@ async def nominate(ctx, *, book_name):
 	if created:
 		await ctx.send(f"Added book **{book.title}**")
 	elif person == nomination.nominator:
-		await ctx.send(f"You've already nominated a book. Clear it with `{bot.command_prefix}rem`\nNote that all votes will be removed once the command is executed.")
+		await ctx.send(f"You've already nominated a book. Clear it with `{guild_data.prefix}rem`\nNote that all votes will be removed once the command is executed.")
 	else:
 		await ctx.send(f"Book already nominated by {nomination.nominator.name}")
 
@@ -106,8 +102,8 @@ async def vote(ctx, *ids):
 	guild_data = guilds[ctx.guild.id]
 	person = Person(ctx.author)
 	if len(ids) == 0:
-		await ctx.send(f"""Vote by picking the index of the book. For instance, `{bot.command_prefix}vote 1` to vote for the first book
-You can also pick second and third place by executing `{bot.command_prefix}vote 1 2 3`""")
+		await ctx.send(f"""Vote by picking the index of the book. For instance, `{guild_data.prefix}vote 1` to vote for the first book
+You can also pick second and third place by executing `{guild_data.prefix}vote 1 2 3`""")
 		return
 	try:
 		nominations = guild_data.nominations.get_nominations(*ids) 
@@ -193,16 +189,26 @@ async def search(ctx, *, book_name):
 
 @bot.command()
 async def help(ctx):
+	guild_data = guilds[ctx.guild.id]
+
 	embed = discord.Embed()
 	embed.title = "Help"
 	embed.set_author(name="Book Club")
 	embed.color = discord.Color.blue()
 
-	embed.add_field(name="search", value=f"Search a book. `{bot.command_prefix}search mexican gothic", inline=False)
+	embed.add_field(name="search", value=f"Search a book. `{guild_data.prefix}search mexican gothic", inline=False)
 	embed.add_field(name="start", value=f"Start a voting session. Further help once executed", inline=False)
 	embed.add_field(name="end", value=f"End a voting session. Declares the winner", inline=False)
+	embed.add_field(name="trust", value=f"`{guild_data.prefix}trust 1` to require a 'trusted' role. `0` to disable.", inline=False)
 
 	await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def trust(ctx, val:bool):
+	guild_data = guilds[ctx.guild.id]
+	guild_data.trust_needed = val
+	await ctx.message.add_reaction(Emojis.check_mark)
 
 token = ""
 with open("token.txt", "r") as f:
