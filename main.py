@@ -14,7 +14,7 @@ bot.remove_command("help")
 
 class GuildData:
     def __init__(self):
-        self.nominations = None # Nominations()
+        self.nominations = None
         self.voting = False
         self.trust_needed = False
         self.prefix = "b!"
